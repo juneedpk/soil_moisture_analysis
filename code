@@ -1,0 +1,114 @@
+// Load TERRA CLIMATE dataset
+var terraClimate = ee.ImageCollection("IDAHO_EPSCOR/TERRACLIMATE");
+
+// Define Pakistan boundary
+var pakistan = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level0")
+                 .filter(ee.Filter.eq('ADM0_NAME', 'Pakistan'));
+
+// Filter dataset for soil moisture (2006-2010)
+var soilMoisture = terraClimate.filterDate('2013-01-01', '2023-12-31')
+                                .select('soil');  // Verify band name
+
+// Compute monthly mean soil moisture
+var monthlyMeanSoilMoisture = soilMoisture.mean();
+
+// Add Pakistan boundary to the map
+Map.centerObject(pakistan, 6);
+Map.addLayer(pakistan, {color: 'black'}, 'Pakistan Boundary');
+
+// Visualize monthly mean soil moisture
+var soilMoistureVis = { min: 0, max: 100, palette: ['blue', 'green', 'yellow', 'red'] };
+Map.addLayer(monthlyMeanSoilMoisture.clip(pakistan), soilMoistureVis, 'Monthly Mean Soil Moisture (2006-2010)');
+
+// Multi-Band Correlation with Precipitation & PET
+var precipitation = terraClimate.filterDate('2013-01-01', '2023-12-31')
+                                 .select('pr').mean();
+var pet = terraClimate.filterDate('2013-01-01', '2023-12-31')
+                       .select('pet').mean();
+
+var combinedImagePrecipitation = monthlyMeanSoilMoisture.addBands(precipitation);
+var correlationPrecipitation = combinedImagePrecipitation.reduceRegion({
+  reducer: ee.Reducer.pearsonsCorrelation(),
+  geometry: pakistan.geometry(),
+  scale: 11000,
+  bestEffort: true
+});
+print('Correlation with Precipitation:', correlationPrecipitation);
+
+var combinedImagePET = monthlyMeanSoilMoisture.addBands(pet);
+var correlationPET = combinedImagePET.reduceRegion({
+  reducer: ee.Reducer.pearsonsCorrelation(),
+  geometry: pakistan.geometry(),
+  scale: 11000,
+  bestEffort: true
+});
+print('Correlation with PET:', correlationPET);
+
+// Statistical Summaries (Zonal Statistics)
+var zonalStats = monthlyMeanSoilMoisture.reduceRegions({
+  collection: pakistan,
+  reducer: ee.Reducer.mean(),
+  scale: 11000
+});
+print('Zonal Statistics for Pakistan:', zonalStats);
+
+// Export High-Resolution Colored GeoTIFF
+Export.image.toDrive({
+  image: monthlyMeanSoilMoisture.clip(pakistan).visualize(soilMoistureVis), // Apply visualization
+  description: 'Pakistan_SoilMoisture_2013_2023',
+  region: pakistan.geometry(),
+  scale: 1000,  // Higher resolution (smaller scale value)
+  maxPixels: 1e9, // Increase the maximum number of pixels for larger areas
+  fileFormat: 'GeoTIFF'
+});
+
+// Export Zonal Statistics as CSV
+Export.table.toDrive({
+  collection: zonalStats,
+  description: 'Pakistan_ZonalStats_SoilMoisture',
+  fileFormat: 'CSV'
+});
+
+// Create a legend for soil moisture
+var legend = ui.Panel({
+  style: {position: 'bottom-left', padding: '8px 15px'}
+});
+
+// Legend Title
+var soilLegendTitle = ui.Label('Monthly Mean Soil Moisture');
+legend.add(soilLegendTitle);
+
+// Define colors and values for the legend
+var soilColors = ['blue', 'green', 'yellow', 'red'];
+var soilValues = [0, 25, 50, 75, 100];
+soilColors.forEach(function(color, index) {
+  var colorBox = ui.Label({
+    style: {backgroundColor: color, padding: '8px', margin: '2px'}
+  });
+  var valueLabel = ui.Label(soilValues[index] + (soilValues[index + 1] ? ' - ' + soilValues[index + 1] : ''));
+  legend.add(ui.Panel([colorBox, valueLabel], ui.Panel.Layout.Flow('horizontal')));
+});
+
+// Add the legend to the map
+Map.add(legend);
+
+// Create a function to overlay a legend on the image
+function overlayLegend(image) {
+  // Create a blank image for the legend with the same dimensions as the soil moisture image
+  var legendImage = ee.Image.constant(0).visualize({palette: ['blue', 'green', 'yellow', 'red'], min: 0, max: 100});
+  // Stack the legend image as a separate band
+  return image.addBands(legendImage.rename('legend')); // Add legend as a new band
+}
+
+// Combine the soil moisture image with the legend for exporting
+var combinedImageWithLegend = overlayLegend(monthlyMeanMoisture.clip(pakistan).visualize(soilMoistureVis));
+
+// Export Combined Image with Legend
+Export.image.toDrive({
+  image: combinedImageWithLegend,
+  description: 'Pakistan_SoilMoisture_WithLegend_2013_2023',
+  region: pakistan.geometry(),
+  scale: 1000,
+  maxPixels: 1e9,
+  fileFormat: 'GeoTIFF'
+});

@@ -5,10 +5,10 @@ This project analyzes soil moisture data in Pakistan using the TERRA CLIMATE dat
 
 ## Table of Contents
 - [Getting Started](#getting-started)
-- [Data](#data)
+- [Data](https://developers.google.com/earth-engine/datasets/catalog/IDAHO_EPSCOR_TERRACLIMATE)
 - [Analysis](#analysis)
 - [Visualization](#visualization)
-- [Exporting Results](#exporting-results)
+- [Exporting Results](https://littledew31.users.earthengine.app/view/soil-moisture-analysis-of-pakistan-2013-2023)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
